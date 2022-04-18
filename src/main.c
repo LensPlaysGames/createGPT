@@ -20,8 +20,8 @@ void print_help() {
          "  This is a tool for creating a disk image file with a GUID Partition Table.\r\n"
          "\r\n"
          "USAGE: %s -o <path> [-p <path>]\r\n"
-         "  -o, --output:    Write the output disk image file to this filepath\r\n"
-         "  -p, --partition: Create a partition from the image at path\r\n"
+         "  -o, --output: Write the output disk image file to this filepath\r\n"
+         "  -p, --part:   Create a partition from the image at path\r\n"
          "\r\n"
          , GPT_IMAGE_VERSION_MAJOR
          , GPT_IMAGE_VERSION_MINOR
@@ -31,6 +31,8 @@ void print_help() {
          );
 }
 
+// TODO: Fill partition table CRC32 field in header and
+//       backup header with proper checksum value.
 int rc_crc32(uint32_t crc, void *buffer, size_t length) {
   static uint32_t table[256];
   static int have_table = 0;
@@ -101,7 +103,10 @@ int main(int argc, char **argv) {
         }
         path = argv[i];
     }
-    if (!strcmp(arg, "-p") || !strcmp(arg, "--partition")) {
+    if (!strcmp(arg, "-p")
+        || !strcmp(arg, "--part")
+        || !strcmp(arg, "--partition"))
+      {
       i++;
       if (argc - i <= 0) {
         print_help();
@@ -198,12 +203,12 @@ int main(int argc, char **argv) {
   // GUID
   header.DiskGUID.Data1 = 8907;
   header.DiskGUID.Data2 = 897;
-  header.DiskGUID.Data3 = 9812;
+  header.DiskGUID.Data3 = 981;
   header.DiskGUID.Data4[0] = 128;
   header.DiskGUID.Data4[1] = 238;
-  header.DiskGUID.Data4[2] = 201;
+  header.DiskGUID.Data4[2] = 231;
   header.DiskGUID.Data4[3] = 85;
-  header.DiskGUID.Data4[4] = 1;
+  header.DiskGUID.Data4[4] = 10;
   header.DiskGUID.Data4[5] = 93;
   header.DiskGUID.Data4[6] = 152;
   header.DiskGUID.Data4[7] = 255;
@@ -211,7 +216,11 @@ int main(int argc, char **argv) {
   header.PartitionsTableLBA = 2;
   header.NumberOfPartitionsTableEntries = 128;
   header.PartitionsTableEntrySize = sizeof(GPT_PARTITION_ENTRY);
-  header.CRC32 = rc_crc32(0, &header, 0x5c);
+  header.CRC32 = rc_crc32(0, &header, header.Size);
+
+  // TODO: Build partition entry array before GPT header.
+  //       Calculate CRC32 of part. entry array and store in GPT header.
+  //header.PartitionEntryArrayCRC32 = rc_crc32(0, address, byteCount);
 
   MASTER_BOOT_RECORD protectiveMBR;
   memset(&protectiveMBR, 0, sizeof(MASTER_BOOT_RECORD));
