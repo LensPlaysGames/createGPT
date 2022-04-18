@@ -76,6 +76,13 @@ LINKED_LIST* linked_list_add(void* newData, LINKED_LIST *list) {
   return newNode;
 }
 
+typedef struct PARTITION_REQUEST_T {
+  const char* Path;
+  FILE* File;  // Input file file descriptor
+  size_t Size; // Size in bytes of input file
+  GPT_PARTITION_ENTRY Partition;
+} PARTITION_REQUEST;
+
 int main(int argc, char **argv) {
   GPT_IMAGE_ARGV_0 = argv[0];
 
@@ -121,60 +128,98 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  size_t BeginDataLBA = 34;
+
   LINKED_LIST *partPath = partitionImagePaths;
+  LINKED_LIST *partRequests = NULL;
   while (partPath != NULL) {
-    printf("Partition Image Path: %s\r\n"
-           , *(char**)partPath->Data
-           );
+    FILE* fp = fopen(*(char**)partPath->Data, "r");
+    if (!fp) {
+      printf("Could not open %s for reading.\r\n"
+             "\r\n"
+             , *(char**)partPath->Data);
+      return 1;
+    }
+    else {
+      PARTITION_REQUEST *partRequest = malloc(sizeof(PARTITION_REQUEST));
+      if (!partRequest) {
+        printf("Could not allocate memory for partition request\r\n"
+               "\r\n");
+        return 1;
+      }
+      partRequest->Path = *(char**)partPath->Data;
+      partRequest->File = fp;
+      fseek(fp, 0, SEEK_END);
+      partRequest->Size = ftell(fp);
+      fseek(fp, 0, SEEK_SET);
+      GPT_PARTITION_ENTRY partEntry;
+      partEntry.StartLBA = BeginDataLBA;
+      size_t partSectors = (partRequest->Size / sectorSize) + 1;
+      BeginDataLBA += partSectors + 1;
+      partEntry.EndLBA = partEntry.StartLBA + partSectors;
+      partEntry.Attributes = 0;
+      partRequest->Partition = partEntry;
+      if (!partRequests) {
+        partRequests = malloc(sizeof(LINKED_LIST));
+        partRequests->Data = partRequest;
+        partRequests->Next = NULL;
+      }
+      else partRequests = linked_list_add(partRequest, partRequests);
+    }
     partPath = partPath->Next;
   }
-  
-  GPT_PARTITION_TABLE* table = malloc(sizeof(GPT_PARTITION_TABLE));
-if (!table) {
-    printf("Could not allocate memory for table.\r\n"
-           "\r\n");
-    return 1;
+
+  // TODO: Clean up partitionImagePaths list.
+
+  LINKED_LIST *partRequest = partRequests;
+  while (partRequest != NULL) {
+    PARTITION_REQUEST *request = (PARTITION_REQUEST*)partRequest->Data;
+    printf("Partition Request:\r\n"
+           "  Path: %s\r\n"
+           "  Size: %zu\r\n"
+           "  StartLBA: %zu\r\n"
+           "  EndLBA: %zu\r\n"
+           , request->Path
+           , request->Size
+           , request->Partition.StartLBA
+           , request->Partition.EndLBA
+           );
+    partRequest = partRequest->Next;
   }
-  memset(table, 0, sectorSize);
+  
+  // TODO: Create GPT header, calculate CRC32.
+  GPT_HEADER header;
+  memset(&header, 0, sizeof(GPT_HEADER));
+  // Header information
+  strcpy((char*)&header.Signature[0], "EFI PART");
+  header.Revision = 1 << 16;
+  header.Size = sizeof(GPT_HEADER);
+  // LBA
+  header.CurrentLBA = 1;
+  header.FirstUsableLBA = 34;
+  header.LastUsableLBA = BeginDataLBA - 1;
+  header.BackupLBA = header.LastUsableLBA + 33;
+  // GUID  
+  header.DiskGUID.Data1 = 8907;
+  header.DiskGUID.Data2 = 897;
+  header.DiskGUID.Data3 = 9812;
+  header.DiskGUID.Data4[0] = 128;
+  header.DiskGUID.Data4[1] = 238;
+  header.DiskGUID.Data4[2] = 201;
+  header.DiskGUID.Data4[3] = 85;
+  header.DiskGUID.Data4[4] = 1;
+  header.DiskGUID.Data4[5] = 93;
+  header.DiskGUID.Data4[6] = 152;
+  header.DiskGUID.Data4[7] = 255;
+  // Partitions
+  header.PartitionsTableLBA = 2;
+  header.NumberOfPartitionsTableEntries = 128;
+  header.PartitionsTableEntrySize = sizeof(GPT_PARTITION_ENTRY);
+  header.CRC32 = rc_crc32(0, &header, 0x5c);
 
   uint8_t *sector = malloc(sectorSize);
   if (!sector) {
     printf("Could not allocate memory for sector.\r\n"
-           "\r\n");
-    return 1;
-  }
-
-  GPT_HEADER *header = malloc(sizeof(GPT_HEADER));
-  if (!header) {
-    printf("Could not allocate memory for GPT header.\r\n"
-           "\r\n");
-    return 1;
-  }
-  memset(header, 0, sizeof(GPT_HEADER));
-  strcpy((char*)&header->Signature[0], "EFI PART");
-  header->Revision = 1 << 16;
-  header->Size = sizeof(GPT_HEADER);
-  header->CurrentLBA = 1;
-  header->FirstUsableLBA = 34;
-  header->LastUsableLBA = 40;
-  header->DiskGUID.Data1 = 0;
-  header->DiskGUID.Data2 = 0;
-  header->DiskGUID.Data3 = 0;
-  header->DiskGUID.Data4[0] = 0;
-  header->DiskGUID.Data4[1] = 0;
-  header->DiskGUID.Data4[2] = 0;
-  header->DiskGUID.Data4[3] = 0;
-  header->DiskGUID.Data4[4] = 0;
-  header->DiskGUID.Data4[5] = 0;
-  header->DiskGUID.Data4[6] = 0;
-  header->DiskGUID.Data4[7] = 0;
-  header->PartitionsTableLBA = 1;
-  header->PartitionsTableEntrySize = sizeof(GPT_PARTITION_ENTRY);
-  header->CRC32 = rc_crc32(0, header, 0x5c);
-  
-  GPT_PARTITION_ENTRY *part_entry = malloc(sizeof(GPT_PARTITION_ENTRY));
-  if (!part_entry) {
-    printf("Could not allocate memory for GPT partition entry.\r\n"
            "\r\n");
     return 1;
   }
@@ -187,60 +232,57 @@ if (!table) {
     return 1;
   }
 
-  MASTER_BOOT_RECORD *mbr = malloc(sizeof(MASTER_BOOT_RECORD));
-  if (!mbr) {
-    printf("Could not allocate memory for MBR\r\n"
-           "\r\n");
-    return 1;
-  }
-  memset(mbr, 0, sizeof(MASTER_BOOT_RECORD));
-
-  // Protective MBR
-  mbr->Partitions[0].StartSectorCHS[1] = 0x02;
-  mbr->Partitions[0].StartLBA = 1;
-  // Probably shouldn't do this.
-  mbr->Partitions[0].SectorCount = UINT32_MAX;
+  MASTER_BOOT_RECORD protectiveMBR;
+  memset(&protectiveMBR, 0, sizeof(MASTER_BOOT_RECORD));
+  protectiveMBR.Partitions[0].StartSectorCHS[1] = 0x02;
+  protectiveMBR.Partitions[0].StartLBA = 1;
+  protectiveMBR.Partitions[0].SectorCount = header.BackupLBA;
   // 0xee == GPT Protective MBR Partition Type
-  mbr->Partitions[0].PartitionType = 0xee;
-  mbr->Partitions[0].LastSectorCHS[0] = 0xff;
-  mbr->Partitions[0].LastSectorCHS[1] = 0xff;
-  mbr->Partitions[0].LastSectorCHS[2] = 0xff;
-  mbr->Magic[0] = 0x55;
-  mbr->Magic[1] = 0xaa;
-  memset(sector, 0, sectorSize);
+  protectiveMBR.Partitions[0].PartitionType = 0xee;
+  protectiveMBR.Partitions[0].LastSectorCHS[0] = 0xff;
+  protectiveMBR.Partitions[0].LastSectorCHS[1] = 0xff;
+  protectiveMBR.Partitions[0].LastSectorCHS[2] = 0xff;
+  protectiveMBR.Magic[0] = 0x55;
+  protectiveMBR.Magic[1] = 0xaa;
+
+  // Write protective MBR to LBA0.
   fseek(image, 0, SEEK_SET);
-  fwrite(mbr, 512, 1, image);
+  fwrite(&protectiveMBR, 512, 1, image);
 
   // Write GPT Header into sector.
   memset(sector, 0, sectorSize);
-  memcpy(sector, header, sizeof(GPT_HEADER));
+  memcpy(sector, &header, sizeof(GPT_HEADER));
   // Write sector into LBA1 of disk image.
   fseek(image, sectorSize, SEEK_SET);
   fwrite(sector, sectorSize, 1, image);
-  // "allocate" space in file for partition entry sectors.
-  fseek(image, sectorSize * 33, SEEK_SET);
-  memset(sector, 0, sectorSize);
-  memcpy(sector, part_entry, sizeof(GPT_PARTITION_ENTRY));
-  fwrite(sector, sectorSize, 1, image);
-  // "allocate" space in file for partitions.
-  fseek(image, sectorSize * 42, SEEK_CUR);
-  fwrite("0", 1, 1, image);
-  // "allocate" space in file for backup header and partition entry sectors.
-  memset(sector, 0, sectorSize);
-  memcpy(sector, part_entry, sizeof(GPT_PARTITION_ENTRY));
-  fwrite(sector, sectorSize, 1, image);
+  // Write partition table.
+  LINKED_LIST *partitions = partRequests;
+  for (int i = 0; i < 32; ++i) {
+    memset(sector, 0, sectorSize);
+    if (partitions) {
+      memcpy(sector, &((PARTITION_REQUEST*)partitions->Data)->Partition
+             , sizeof(GPT_PARTITION_ENTRY));
+      fwrite(sector, sectorSize, 1, image);
+      partitions = partitions->Next;
+    }
+    else fwrite(sector, sectorSize, 1, image);
+  }
 
-  fseek(image, sectorSize * 32, SEEK_CUR);
-
-  memset(sector, 0, sectorSize);
-  memcpy(sector, header, sizeof(GPT_HEADER));
-  fwrite(sector, sectorSize, 1, image);
+  LINKED_LIST *parts = partRequests;
+  while (parts) {
+    memset(sector, 0, sectorSize);
+    GPT_PARTITION_ENTRY *entry = &((PARTITION_REQUEST*)partitions->Data)->Partition;
+    size_t sectors = entry->EndLBA - entry->StartLBA;
+    memcpy(sector, entry, sizeof(GPT_PARTITION_ENTRY));
+    fwrite(sector, sectorSize, sectors, image);
+    printf("Wrote %zu sectors for partition\r\n"
+           , sectors);
+    parts = parts->Next;
+  }
 
   fclose(image);
 
-  /* TODO:
-   * For every partition, create an entry in the GPT, as well as the space in the file.
-   */
+  free(sector);
 
   return 0;
 }
