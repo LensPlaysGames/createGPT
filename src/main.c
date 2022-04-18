@@ -280,21 +280,17 @@ int main(int argc, char **argv) {
   while (partitions != NULL) {
     memset(sector, 0, sectorSize);
     PARTITION_REQUEST* request = (PARTITION_REQUEST*)partitions->Data;
-    size_t byteCount = (request->Partition.EndLBA - request->Partition.StartLBA + 1) * sectorSize;
-    void* buffer = malloc(byteCount);
+    const size_t bufferSize = 1024 << 10;
+    void* buffer = malloc(bufferSize);
     if (!buffer) {
       printf("Could not allocate memory for partition buffer\r\n"
              "\r\n");
       return 1;
     }
-    size_t bytesRead = fread(buffer, 1, request->Size, request->File);
-    if (bytesRead != request->Size) {
-      printf("Could not read partition image: Expected %zu bytes, but got %zu\r\n"
-             "\r\n"
-             , request->Size, bytesRead);
-      return 1;
+    size_t bytesRead = 0;
+    while ((bytesRead = fread(buffer, 1, bufferSize, request->File) > 0)) {
+      fwrite(buffer, 1, bytesRead, image);
     }
-    fwrite(buffer, 1, byteCount, image);
     free(buffer);
     partitions = partitions->Next;
   }
