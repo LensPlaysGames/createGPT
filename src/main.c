@@ -33,19 +33,13 @@ void print_help() {
 
 // TODO: Fill partition table CRC32 field in header and
 //       backup header with proper checksum value.
-int rc_crc32(uint32_t crc, void *buffer, size_t length) {
+uint32_t rc_crc32(void *buffer, size_t length) {
   static uint32_t table[256];
   static int have_table = 0;
-  uint32_t remainder;
-  uint8_t octet;
-  int i;
-  int j;
-  const uint8_t *p;
-  const uint8_t *q;
   if (have_table == 0) {
-    for (i = 0; i < 256; ++i) {
-      remainder = i;
-      for (j = 0; j < 8; ++j) {
+    for (int i = 0; i < 256; ++i) {
+      uint32_t remainder = i;
+      for (uint8_t j = 0; j < 8; ++j) {
         if (remainder & 1) {
           remainder >>= 1;
           remainder ^= 0xedb88320;
@@ -56,11 +50,11 @@ int rc_crc32(uint32_t crc, void *buffer, size_t length) {
     }
     have_table = 1;
   }
-  crc = ~crc;
-  q = buffer + length;
-  for (p = buffer; p < q; ++p) {
-    octet = *p;
-    crc = (crc >> 8) ^ table[(crc & 0xff) ^ octet];
+  uint32_t crc = ~0u;
+  const uint8_t *q = buffer + length;
+  for (const uint8_t *p = buffer; p < q; ++p) {
+    uint8_t octet = *p;
+    crc = (crc >> 8) ^ table[(crc ^ octet) & 0xff];
   }
   return ~crc;
 }
@@ -227,11 +221,11 @@ int main(int argc, char **argv) {
   header.PartitionsTableLBA = 2;
   header.NumberOfPartitionsTableEntries = 128;
   header.PartitionsTableEntrySize = sizeof(GPT_PARTITION_ENTRY);
-  header.CRC32 = rc_crc32(0, &header, header.Size);
+  header.CRC32 = rc_crc32(&header, header.Size);
 
   // TODO: Build partition entry array before GPT header.
   //       Calculate CRC32 of part. entry array and store in GPT header.
-  //header.PartitionEntryArrayCRC32 = rc_crc32(0, address, byteCount);
+  //header.PartitionEntryArrayCRC32 = rc_crc32(address, byteCount);
 
   MASTER_BOOT_RECORD protectiveMBR;
   memset(&protectiveMBR, 0, sizeof(MASTER_BOOT_RECORD));
@@ -253,6 +247,7 @@ int main(int argc, char **argv) {
            , path);
     return 1;
   }
+  rewind(image);
 
   // Write protective MBR to LBA0.
   fseek(image, 0, SEEK_SET);
@@ -292,7 +287,7 @@ int main(int argc, char **argv) {
     partEntry++;
   }
 
-  size_t tableCRC = rc_crc32(0, partTable, sizeof(GPT_PARTITION_TABLE));
+  size_t tableCRC = rc_crc32(partTable, sizeof(GPT_PARTITION_TABLE));
   header.PartitionEntryArrayCRC32 = tableCRC;
 
   //memset(sector, 0, sectorSize);
@@ -353,6 +348,7 @@ int main(int argc, char **argv) {
 
   // Prepare backup GPT header.
   GPT_HEADER backup = header;
+  backup.CRC32 = 0;
   backup.PartitionsTableLBA = header.BackupLBA - 32;
   backup.CurrentLBA = header.BackupLBA;
   backup.BackupLBA = header.CurrentLBA;
