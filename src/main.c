@@ -64,11 +64,25 @@ int rc_crc32(uint32_t crc, void *buffer, size_t length) {
   return ~crc;
 }
 
+typedef struct LINKED_LIST_T {
+  void* Data;
+  struct LINKED_LIST_T *Next;
+} LINKED_LIST;
+
+LINKED_LIST* linked_list_add(void* newData, LINKED_LIST *list) {
+  LINKED_LIST *newNode = malloc(sizeof(LINKED_LIST));
+  newNode->Data = newData;
+  newNode->Next = list;
+  return newNode;
+}
+
 int main(int argc, char **argv) {
   GPT_IMAGE_ARGV_0 = argv[0];
 
   const unsigned sectorSize = 512;
   const char* path = NULL;
+
+  LINKED_LIST *partitionImagePaths = NULL;
 
   // TODO: Create singly linked list of partition request structures, or something.
   for (int i = 0; i < argc; ++i) {
@@ -83,6 +97,21 @@ int main(int argc, char **argv) {
         }
         path = argv[i];
     }
+    if (!strcmp(arg, "-p") || !strcmp(arg, "--partition")) {
+      i++;
+      if (argc - i <= 0) {
+        print_help();
+        printf("Expected a filepath following `-p`, `--partition`\r\n"
+               "\r\n");
+        return 1;
+      }
+      if (partitionImagePaths == NULL) {
+        partitionImagePaths = malloc(sizeof(LINKED_LIST));
+        partitionImagePaths->Data = &argv[i];
+        partitionImagePaths->Next = NULL;
+      }
+      else partitionImagePaths = linked_list_add(&argv[i], partitionImagePaths);
+    }
   }
 
   if (!path) {
@@ -90,6 +119,14 @@ int main(int argc, char **argv) {
     printf("Output filepath is null!\r\n"
            "\r\n");
     return 1;
+  }
+
+  LINKED_LIST *partPath = partitionImagePaths;
+  while (partPath != NULL) {
+    printf("Partition Image Path: %s\r\n"
+           , *(char**)partPath->Data
+           );
+    partPath = partPath->Next;
   }
   
   GPT_PARTITION_TABLE* table = malloc(sizeof(GPT_PARTITION_TABLE));
