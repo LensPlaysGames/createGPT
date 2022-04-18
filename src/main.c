@@ -32,6 +32,38 @@ void print_help() {
          );
 }
 
+int rc_crc32(uint32_t crc, void *buffer, size_t length) {
+  static uint32_t table[256];
+  static int have_table = 0;
+  uint32_t remainder;
+  uint8_t octet;
+  int i;
+  int j;
+  const uint8_t *p;
+  const uint8_t *q;
+  if (have_table == 0) {
+    for (i = 0; i < 256; ++i) {
+      remainder = i;
+      for (j = 0; j < 8; ++j) {
+        if (remainder & 1) {
+          remainder >>= 1;
+          remainder ^= 0xedb88320;
+        }
+        else remainder >>= 1;
+      }
+      table[i] = remainder;
+    }
+    have_table = 1;
+  }
+  crc = ~crc;
+  q = buffer + length;
+  for (p = buffer; p < q; ++p) {
+    octet = *p;
+    crc = (crc >> 8) ^ table[(crc & 0xff) ^ octet];
+  }
+  return ~crc;
+}
+
 int main(int argc, char **argv) {
   GPT_IMAGE_ARGV_0 = argv[0];
 
@@ -101,6 +133,7 @@ if (!table) {
   header->DiskGUID.Data4[7] = 0;
   header->PartitionsTableLBA = 1;
   header->PartitionsTableEntrySize = sizeof(GPT_PARTITION_ENTRY);
+  header->CRC32 = rc_crc32(0, header, 0x5c);
   
   GPT_PARTITION_ENTRY *part_entry = malloc(sizeof(GPT_PARTITION_ENTRY));
   if (!part_entry) {
