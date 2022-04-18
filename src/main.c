@@ -155,6 +155,17 @@ int main(int argc, char **argv) {
       partRequest->Size = ftell(fp);
       fseek(fp, 0, SEEK_SET);
       GPT_PARTITION_ENTRY partEntry;
+      partEntry.TypeGUID.Data1 = 0xc12a7328;
+      partEntry.TypeGUID.Data2 = 0xf81f;
+      partEntry.TypeGUID.Data3 = 0x11d2;
+      partEntry.TypeGUID.Data4[0] = 0xba;
+      partEntry.TypeGUID.Data4[1] = 0x4b;
+      partEntry.TypeGUID.Data4[2] = 0x00;
+      partEntry.TypeGUID.Data4[3] = 0xa0;
+      partEntry.TypeGUID.Data4[4] = 0xc9;
+      partEntry.TypeGUID.Data4[5] = 0x3e;
+      partEntry.TypeGUID.Data4[6] = 0xc9;
+      partEntry.TypeGUID.Data4[7] = 0x3b;
       partEntry.StartLBA = BeginDataLBA;
       size_t partSectors = (partRequest->Size / sectorSize) + 1;
       BeginDataLBA += partSectors + 1;
