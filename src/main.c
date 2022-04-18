@@ -259,23 +259,54 @@ int main(int argc, char **argv) {
   fseek(image, sectorSize, SEEK_SET);
   fwrite(sector, 1, sectorSize, image);
 
-  // Write partition table at LBA2.
+  // Write partition table to memory and disk.
   fseek(image, sectorSize * 2, SEEK_SET);
-  memset(sector, 0, sectorSize);
-  LINKED_LIST *partitions = partRequests;
+  GPT_PARTITION_TABLE* partTable = malloc(sizeof(GPT_PARTITION_TABLE));
+  if (!partTable) {
+    printf("Could not allocate memory for partition entry table.\r\n"
+           "\r\n");
+    return 1;
+  }
+  memset(partTable, 0, sizeof(GPT_PARTITION_TABLE));
+  GPT_PARTITION_ENTRY* partEntry = (GPT_PARTITION_ENTRY*)partTable;
+  LINKED_LIST *part = partRequests;
   for (int i = 0; i < 128; ++i) {
-    memset(sector, 0, sectorSize);
-    if (partitions) {
-      fwrite(&((PARTITION_REQUEST*)partitions->Data)->Partition
-             , 1
-             , sizeof(GPT_PARTITION_ENTRY)
-             , image);
-      partitions = partitions->Next;
+    if (part) {
+      memcpy(partEntry
+             , &((PARTITION_REQUEST*)part->Data)->Partition
+             , sizeof(GPT_PARTITION_ENTRY));
+      part = part->Next;
     }
-    else fwrite(sector, 1, sizeof(GPT_PARTITION_ENTRY), image);
+    fwrite(partEntry, 1, sizeof(GPT_PARTITION_ENTRY), image);
+    partEntry++;
   }
 
+  size_t tableCRC = rc_crc32(0, partTable, sizeof(GPT_PARTITION_TABLE));
+  header.PartitionEntryArrayCRC32 = tableCRC;
+
+  //memset(sector, 0, sectorSize);
+  //memcpy(sector, &header, sizeof(GPT_HEADER));
+  //fseek(image, sectorSize, SEEK_SET);
+  //fwrite(sector, 1, sectorSize, image);
+
+  //fseek(image, sectorSize * 2, SEEK_SET);
+  //memset(sector, 0, sectorSize);
+  LINKED_LIST *partitions = partRequests;
+  //for (int i = 0; i < 128; ++i) {
+  //  memset(sector, 0, sectorSize);
+  //  if (partitions) {
+  //    fwrite(&((PARTITION_REQUEST*)partitions->Data)->Partition
+  //           , 1
+  //           , sizeof(GPT_PARTITION_ENTRY)
+  //           , image);
+  //    partitions = partitions->Next;
+  //  }
+  //  else fwrite(sector, 1, sizeof(GPT_PARTITION_ENTRY), image);
+  //}
+
+
   // Write partitions
+  fseek(image, header.FirstUsableLBA * sectorSize, SEEK_SET);
   partitions = partRequests;
   while (partitions != NULL) {
     memset(sector, 0, sectorSize);
@@ -319,6 +350,16 @@ int main(int argc, char **argv) {
   memcpy(sector, &backup, sizeof(GPT_HEADER));
   fseek(image, sectorSize * header.BackupLBA, SEEK_SET);
   fwrite(sector, 1, sectorSize, image);
+
+  // Uncommenting this anywhere breaks the output.
+  // This doesn't make sense as it should just be copying
+  // the same input to the same output no matter where or when it's called.
+  // What am I doing wrong??
+  //memset(sector, 0, sectorSize);
+  //memcpy(sector, &header, sizeof(GPT_HEADER));
+  //rewind(image);
+  //fseek(image, sectorSize, SEEK_SET);
+  //fwrite(&header, 1, sizeof(GPT_HEADER), image);
 
   fclose(image);
   free(sector);
