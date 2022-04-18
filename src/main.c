@@ -192,7 +192,7 @@ int main(int argc, char **argv) {
   GPT_HEADER header;
   memset(&header, 0, sizeof(GPT_HEADER));
   // Header information
-  strcpy((char*)&header.Signature[0], "EFI PART");
+  memcpy(&header.Signature[0], "EFI PART", 8);
   header.Revision = 1 << 16;
   header.Size = sizeof(GPT_HEADER);
   // LBAs
