@@ -58,6 +58,7 @@
 **/.swp
 
 # clangd
+**/compile_commands.json
 .cache/
 
 # cinclude2dot
