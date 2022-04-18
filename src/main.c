@@ -1,3 +1,5 @@
+#include <gpt.h>
+
 #include <stdbool.h>
 #include <stdio.h>
 
