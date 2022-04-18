@@ -16,7 +16,6 @@ project( GPT_IMAGE_PROJ VERSION 0.0.1 LANGUAGES C )
 
 set(
   GPT_IMAGE_SOURCES
-  src/gpt.c
   src/main.c
 )
 

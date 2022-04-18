@@ -20,10 +20,11 @@ typedef struct GPT_HEADER_T {
   uint64_t BackupLBA;
   uint64_t FirstUsableLBA;
   uint64_t LastUsableLBA;
-  uint8_t  DiskGU;
+  GUID  DiskGUID;
   uint64_t PartitionsTableLBA;
   uint32_t NumberOfPartitionsTableEntries;
   uint32_t PartitionsTableEntrySize;
+  uint32_t PartitionEntryArrayCRC32;
 }  __attribute__((packed)) GPT_HEADER;
 
 typedef struct GPT_PARTITION_ENTRY_T {
@@ -36,7 +37,8 @@ typedef struct GPT_PARTITION_ENTRY_T {
   uint8_t Name[72];
 } __attribute__((packed)) GPT_PARTITION_ENTRY;
 
-void initialize_gpt_header(GPT_HEADER* header);
-void initialize_gpt_part_entry(GPT_PARTITION_ENTRY* part_entry);
+typedef struct GPT_PARTITION_TABLE_T {
+  GPT_PARTITION_ENTRY PartitionEntries[128];
+} __attribute__((packed)) GPT_PARTITION_TABLE;
 
 #endif /* GPT_IMAGE_GPT_H */
