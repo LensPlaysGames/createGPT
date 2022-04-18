@@ -33,7 +33,7 @@ void print_help() {
 
 // TODO: Fill partition table CRC32 field in header and
 //       backup header with proper checksum value.
-uint32_t rc_crc32(void *buffer, size_t length) {
+uint32_t crc32(void *buffer, size_t length) {
   static uint32_t table[256];
   static int have_table = 0;
   if (have_table == 0) {
@@ -124,6 +124,10 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  // LBA:
+  // |-- 0:    Protective MBR
+  // |-- 1:    GPT Header
+  // `-- 2-33: Partition Table Entries
   size_t BeginDataLBA = 34;
 
   LINKED_LIST *partPath = partitionImagePaths;
@@ -149,6 +153,7 @@ int main(int argc, char **argv) {
       partRequest->Size = ftell(fp);
       fseek(fp, 0, SEEK_SET);
       GPT_PARTITION_ENTRY partEntry;
+      memset(&partEntry.Name[0], '\0', 72);
       partEntry.TypeGUID.Data1 = 0xc12a7328;
       partEntry.TypeGUID.Data2 = 0xf81f;
       partEntry.TypeGUID.Data3 = 0x11d2;
@@ -176,7 +181,13 @@ int main(int argc, char **argv) {
     partPath = partPath->Next;
   }
 
-  // TODO: Clean up partitionImagePaths list.
+  // Clean up partitionImagePaths list.
+  partPath = partitionImagePaths;
+  while (partPath != NULL) {
+    void* addressToFree = partPath;
+    partPath = partPath->Next;
+    free(addressToFree);
+  }
 
   LINKED_LIST *partRequest = partRequests;
   while (partRequest != NULL) {
@@ -221,7 +232,9 @@ int main(int argc, char **argv) {
   header.PartitionsTableLBA = 2;
   header.NumberOfPartitionsTableEntries = 128;
   header.PartitionsTableEntrySize = sizeof(GPT_PARTITION_ENTRY);
-  header.CRC32 = rc_crc32(&header, header.Size);
+  header.PartitionEntryArrayCRC32 = 0;
+  header.Reserved0 = 0;
+  header.CRC32 = 0;
 
   // TODO: Build partition entry array before GPT header.
   //       Calculate CRC32 of part. entry array and store in GPT header.
@@ -287,33 +300,16 @@ int main(int argc, char **argv) {
     partEntry++;
   }
 
-  size_t tableCRC = rc_crc32(partTable, sizeof(GPT_PARTITION_TABLE));
-  header.PartitionEntryArrayCRC32 = tableCRC;
+  // Update main GPT Header with partition table CRC32.
+  header.PartitionEntryArrayCRC32 = crc32(partTable, sizeof(GPT_PARTITION_TABLE));
+  header.CRC32 = crc32(&header, header.Size);
 
-  //memset(sector, 0, sectorSize);
-  //memcpy(sector, &header, sizeof(GPT_HEADER));
-  //fseek(image, sectorSize, SEEK_SET);
-  //fwrite(sector, 1, sectorSize, image);
-
-  //fseek(image, sectorSize * 2, SEEK_SET);
-  //memset(sector, 0, sectorSize);
-  LINKED_LIST *partitions = partRequests;
-  //for (int i = 0; i < 128; ++i) {
-  //  memset(sector, 0, sectorSize);
-  //  if (partitions) {
-  //    fwrite(&((PARTITION_REQUEST*)partitions->Data)->Partition
-  //           , 1
-  //           , sizeof(GPT_PARTITION_ENTRY)
-  //           , image);
-  //    partitions = partitions->Next;
-  //  }
-  //  else fwrite(sector, 1, sizeof(GPT_PARTITION_ENTRY), image);
-  //}
-
+  fseek(image, sectorSize, SEEK_SET);
+  fwrite(&header, 1, sizeof(GPT_HEADER), image);
 
   // Write partitions
   fseek(image, header.FirstUsableLBA * sectorSize, SEEK_SET);
-  partitions = partRequests;
+  LINKED_LIST *partitions = partRequests;
   while (partitions != NULL) {
     memset(sector, 0, sectorSize);
     PARTITION_REQUEST* request = (PARTITION_REQUEST*)partitions->Data;
@@ -332,41 +328,37 @@ int main(int argc, char **argv) {
     partitions = partitions->Next;
   }
 
-  // Write backup partition table.
-  memset(sector, 0, sectorSize);
-  partitions = partRequests;
+  // Write backup partition table to file and memory.
+  memset(partTable, 0, sizeof(GPT_PARTITION_TABLE));
+  partEntry = (GPT_PARTITION_ENTRY*)partTable;
+  part = partRequests;
   for (int i = 0; i < 128; ++i) {
-    if (partitions) {
-      fwrite(&((PARTITION_REQUEST*)partitions->Data)->Partition
-             , 1
-             , sizeof(GPT_PARTITION_ENTRY)
-             , image);
-      partitions = partitions->Next;
+    if (part) {
+      memcpy(partEntry
+             , &((PARTITION_REQUEST*)part->Data)->Partition
+             , sizeof(GPT_PARTITION_ENTRY));
+      part = part->Next;
     }
-    else fwrite(sector, 1, sizeof(GPT_PARTITION_ENTRY), image);
+    fwrite(partEntry, 1, sizeof(GPT_PARTITION_ENTRY), image);
+    partEntry++;
   }
+
+  uint32_t backupTableCRC = crc32(partTable, sizeof(GPT_PARTITION_TABLE));
 
   // Prepare backup GPT header.
   GPT_HEADER backup = header;
-  backup.CRC32 = 0;
+
   backup.PartitionsTableLBA = header.BackupLBA - 32;
   backup.CurrentLBA = header.BackupLBA;
   backup.BackupLBA = header.CurrentLBA;
+  backup.PartitionEntryArrayCRC32 = backupTableCRC;
+  backup.CRC32 = 0;
+  backup.CRC32 = crc32(&backup, backup.Size);
   // Write backup GPT header.
   memset(sector, 0, sectorSize);
   memcpy(sector, &backup, sizeof(GPT_HEADER));
   fseek(image, sectorSize * header.BackupLBA, SEEK_SET);
   fwrite(sector, 1, sectorSize, image);
-
-  // Uncommenting this anywhere breaks the output.
-  // This doesn't make sense as it should just be copying
-  // the same input to the same output no matter where or when it's called.
-  // What am I doing wrong??
-  //memset(sector, 0, sectorSize);
-  //memcpy(sector, &header, sizeof(GPT_HEADER));
-  //rewind(image);
-  //fseek(image, sectorSize, SEEK_SET);
-  //fwrite(&header, 1, sizeof(GPT_HEADER), image);
 
   fclose(image);
   free(sector);
