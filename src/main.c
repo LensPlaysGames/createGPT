@@ -287,7 +287,13 @@ int main(int argc, char **argv) {
              "\r\n");
       return 1;
     }
-    fread(buffer, 1, request->Size, request->File);
+    size_t bytesRead = fread(buffer, 1, request->Size, request->File);
+    if (bytesRead != request->Size) {
+      printf("Could not read partition image: Expected %zu bytes, but got %zu\r\n"
+             "\r\n"
+             , request->Size, bytesRead);
+      return 1;
+    }
     fwrite(buffer, 1, byteCount, image);
     free(buffer);
     partitions = partitions->Next;
