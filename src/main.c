@@ -247,14 +247,14 @@ int main(int argc, char **argv) {
 
   // Write protective MBR to LBA0.
   fseek(image, 0, SEEK_SET);
-  fwrite(&protectiveMBR, 512, 1, image);
+  fwrite(&protectiveMBR, 1, 512, image);
 
   // Write GPT Header into sector.
   memset(sector, 0, sectorSize);
   memcpy(sector, &header, sizeof(GPT_HEADER));
   // Write sector into LBA1 of disk image.
   fseek(image, sectorSize, SEEK_SET);
-  fwrite(sector, sectorSize, 1, image);
+  fwrite(sector, 1, sectorSize, image);
   // Write partition table.
   LINKED_LIST *partitions = partRequests;
   for (int i = 0; i < 32; ++i) {
@@ -262,26 +262,43 @@ int main(int argc, char **argv) {
     if (partitions) {
       memcpy(sector, &((PARTITION_REQUEST*)partitions->Data)->Partition
              , sizeof(GPT_PARTITION_ENTRY));
-      fwrite(sector, sectorSize, 1, image);
+      fwrite(sector, 1, sectorSize, image);
       partitions = partitions->Next;
     }
-    else fwrite(sector, sectorSize, 1, image);
+    else fwrite(sector, 1, sectorSize, image);
   }
 
-  LINKED_LIST *parts = partRequests;
-  while (parts) {
+  // Write partitions
+  partitions = partRequests;
+  while (partitions != NULL) {
     memset(sector, 0, sectorSize);
-    GPT_PARTITION_ENTRY *entry = &((PARTITION_REQUEST*)partitions->Data)->Partition;
-    size_t sectors = entry->EndLBA - entry->StartLBA;
-    memcpy(sector, entry, sizeof(GPT_PARTITION_ENTRY));
-    fwrite(sector, sectorSize, sectors, image);
-    printf("Wrote %zu sectors for partition\r\n"
-           , sectors);
-    parts = parts->Next;
+    PARTITION_REQUEST* request = (PARTITION_REQUEST*)partitions->Data;
+    fseek(image, (request->Partition.EndLBA - request->Partition.StartLBA) * sectorSize, SEEK_CUR);
+    partitions = partitions->Next;
   }
+
+  // Write partition table.
+  partitions = partRequests;
+  for (int i = 0; i < 32; ++i) {
+    memset(sector, 0, sectorSize);
+    if (partitions) {
+      memcpy(sector, &((PARTITION_REQUEST*)partitions->Data)->Partition
+             , sizeof(GPT_PARTITION_ENTRY));
+      fwrite(sector, 1, sectorSize, image);
+      partitions = partitions->Next;
+    }
+    else fwrite(sector, 1, sectorSize, image);
+  }
+
+  GPT_HEADER backup = header;
+  backup.BackupLBA = header.CurrentLBA;
+  backup.CurrentLBA = header.BackupLBA;
+
+  memset(sector, 0, sectorSize);
+  memcpy(sector, &header, sizeof(GPT_HEADER));
+  fwrite(sector, 1, sectorSize, image);
 
   fclose(image);
-
   free(sector);
 
   return 0;
