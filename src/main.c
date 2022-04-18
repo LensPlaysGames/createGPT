@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
   // |-- 1:    GPT Header
   // `-- 2-33: Partition Table Entries
   size_t BeginDataLBA = 34;
-
+  size_t partCount = 0;
   LINKED_LIST *partPath = partitionImagePaths;
   LINKED_LIST *partRequests = NULL;
   while (partPath != NULL) {
@@ -141,6 +141,7 @@ int main(int argc, char **argv) {
       return 1;
     }
     else {
+      partCount += 1;
       PARTITION_REQUEST *partRequest = malloc(sizeof(PARTITION_REQUEST));
       if (!partRequest) {
         printf("Could not allocate memory for partition request\r\n"
@@ -154,6 +155,7 @@ int main(int argc, char **argv) {
       fseek(fp, 0, SEEK_SET);
       GPT_PARTITION_ENTRY partEntry;
       memset(&partEntry.Name[0], '\0', 72);
+      sprintf((char*)&partEntry.Name[0], "%zu", partCount);
       partEntry.TypeGUID.Data1 = 0xc12a7328;
       partEntry.TypeGUID.Data2 = 0xf81f;
       partEntry.TypeGUID.Data3 = 0x11d2;
@@ -320,6 +322,7 @@ int main(int argc, char **argv) {
              "\r\n");
       return 1;
     }
+    // TODO: Better read/write copying.
     size_t bytesRead = 0;
     while ((bytesRead = fread(buffer, 1, bufferSize, request->File) > 0)) {
       fwrite(buffer, 1, bytesRead, image);
@@ -362,6 +365,16 @@ int main(int argc, char **argv) {
 
   fclose(image);
   free(sector);
+
+  // Clean up partRequests list
+  part = partRequests;
+  for (int i = 0; i < 128; ++i) {
+    void* node = part;
+    void* request = part->Data;
+    part = part->Next;
+    free(request);
+    free(node);
+  }
 
   return 0;
 }
