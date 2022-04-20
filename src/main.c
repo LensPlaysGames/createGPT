@@ -33,7 +33,7 @@ void print_help() {
 
 // TODO: Fill partition table CRC32 field in header and
 //       backup header with proper checksum value.
-uint32_t crc32(void *buffer, size_t length) {
+uint32_t crc32(uint32_t crc, void *buffer, size_t length) {
   static uint32_t table[256];
   static int have_table = 0;
   if (have_table == 0) {
@@ -50,7 +50,7 @@ uint32_t crc32(void *buffer, size_t length) {
     }
     have_table = 1;
   }
-  uint32_t crc = ~0u;
+  crc = ~crc;
   const uint8_t *q = buffer + length;
   for (const uint8_t *p = buffer; p < q; ++p) {
     uint8_t octet = *p;
