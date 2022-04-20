@@ -17,7 +17,7 @@ char *GPT_IMAGE_ARGV_0 = NULL;
 
 void print_help() {
   printf("gpt-image V%u.%u.%u.%u Copyright (C) 2022 Rylan Lens Kellogg\r\n"
-         "  This is a tool for creating a disk image file with a GUID Partition Table.\r\n"
+         "  Create disk image files with valid GUID Partition Tables.\r\n"
          "\r\n"
          "USAGE: %s -o <path> [-p <path>]\r\n"
          "  -o, --output: Write the output disk image file to this filepath\r\n"
@@ -31,8 +31,6 @@ void print_help() {
          );
 }
 
-// TODO: Fill partition table CRC32 field in header and
-//       backup header with proper checksum value.
 uint32_t crc32(uint32_t crc, void *buffer, size_t length) {
   static uint32_t table[256];
   static int have_table = 0;
@@ -84,7 +82,7 @@ int main(int argc, char **argv) {
   const unsigned sectorSize = 512;
   const char* path = NULL;
 
-  size_t dataSectorsOffset = 34;  
+  size_t dataSectorsOffset = 34;
   LINKED_LIST *partitionContexts = NULL;
   for (int i = 0; i < argc; ++i) {
     const char *arg = argv[i];
@@ -200,6 +198,7 @@ int main(int argc, char **argv) {
   GPT_HEADER header;
   memset(&header, 0, sizeof(GPT_HEADER));
   // Header information
+  // FIXME: Signature passed on cmd line!
   memcpy(&header.Signature[0], "EFI PART", 8);
   header.Revision = 1 << 16;
   header.Size = sizeof(GPT_HEADER);
@@ -209,6 +208,7 @@ int main(int argc, char **argv) {
   header.LastUsableLBA = partitionsLastLBA;
   header.BackupLBA = header.LastUsableLBA + 33;
   // GUID
+  // FIXME: Actually generate a random GUID.
   header.DiskGUID.Data1 = 8907;
   header.DiskGUID.Data2 = 897;
   header.DiskGUID.Data3 = 981;
