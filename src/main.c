@@ -2,11 +2,13 @@
 #include <mbr.h>
 
 #define _CRT_SECURE_NO_WARNINGS
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 #define GPT_IMAGE_VERSION_MAJOR 0
 #define GPT_IMAGE_VERSION_MINOR 0
@@ -56,6 +58,45 @@ uint32_t crc32(uint32_t crc, void *buffer, size_t length) {
   }
   return ~crc;
 }
+
+#define G32 "%08" SCNx32
+#define G16 "%04" SCNx16
+#define G8  "%02" SCNx8
+
+bool string_to_guid(const char *str, GUID *guid) {
+  if (!guid)
+    return false;
+
+  int nchars = -1;
+  int nfields =
+    sscanf(str
+           , G32 "-" G16 "-" G16 "-" G8 G8 "-" G8 G8 G8 G8 G8 G8 "%n"
+           , &guid->Data1, &guid->Data2, &guid->Data3
+           , &guid->Data4[0], &guid->Data4[1]
+           , &guid->Data4[2], &guid->Data4[3]
+           , &guid->Data4[4], &guid->Data4[5]
+           , &guid->Data4[6], &guid->Data4[7]
+           , &nchars
+           );
+  return nfields == 11 && nchars == 38;
+}
+
+void print_guid(GUID *guid) {
+  if (!guid)
+    return;
+
+  printf(G32 "-" G16 "-" G16 "-" G8 G8 "-" G8 G8 G8 G8 G8 G8
+         , guid->Data1, guid->Data2, guid->Data3
+         , guid->Data4[0], guid->Data4[1]
+         , guid->Data4[2], guid->Data4[3]
+         , guid->Data4[4], guid->Data4[5]
+         , guid->Data4[6], guid->Data4[7]
+         );
+}
+
+#undef G32
+#undef G16
+#undef G8
 
 typedef struct LINKED_LIST_T {
   void* Data;
@@ -172,23 +213,30 @@ int main(int argc, char **argv) {
   LINKED_LIST *partContext = partitionContexts;
   GPT_PARTITION_ENTRY *tableIterator = (GPT_PARTITION_ENTRY *)table;
   while (partContext != NULL) {
-    printf("Partition Context:\r\n"
-           "  Path: %s\r\n"
-           "  Size: %zu\r\n"
+    PARTITION_CONTEXT *part = ((PARTITION_CONTEXT *)partContext->Data);
+    swprintf((wchar_t *)part->GPTEntry.Name, 72, L"I am a partition");
+    printf("Partition Context:\r\n");
+    wprintf(L"  Name:     \"%ls\"\r\n", part->GPTEntry.Name);
+    printf("  Path:     \"%s\"\r\n"
+           "  Size:     %zu\r\n"
            "  StartLBA: %llu\r\n"
-           "  EndLBA: %llu\r\n"
-           "  Name: %s\r\n"
-           , ((PARTITION_CONTEXT *)partContext->Data)->ImagePath
-           , ((PARTITION_CONTEXT *)partContext->Data)->FileSize
-           , ((PARTITION_CONTEXT *)partContext->Data)->GPTEntry.StartLBA
-           , ((PARTITION_CONTEXT *)partContext->Data)->GPTEntry.EndLBA
-           , ((PARTITION_CONTEXT *)partContext->Data)->GPTEntry.Name
+           "  EndLBA:   %llu\r\n"
+           , part->ImagePath
+           , part->FileSize
+           , part->GPTEntry.StartLBA
+           , part->GPTEntry.EndLBA
            );
+    printf("  Type:     ");
+    print_guid(&part->GPTEntry.TypeGUID);
+    printf("\r\n"
+           "  Unique:   ");
+    print_guid(&part->GPTEntry.UniqueGUID);
+    printf("\r\n");
     
-    uint64_t endLBA = ((PARTITION_CONTEXT *)partContext->Data)->GPTEntry.EndLBA;
+    uint64_t endLBA = part->GPTEntry.EndLBA;
     partitionsLastLBA = endLBA > partitionsLastLBA ? endLBA : partitionsLastLBA;
 
-    memcpy(tableIterator, &((PARTITION_CONTEXT *)partContext->Data)->GPTEntry, sizeof(GPT_PARTITION_ENTRY));
+    memcpy(tableIterator, &part->GPTEntry, sizeof(GPT_PARTITION_ENTRY));
 
     partContext = partContext->Next;
     tableIterator++;
@@ -276,24 +324,29 @@ int main(int argc, char **argv) {
   fseek(image, header.PartitionsTableLBA * sectorSize, SEEK_SET);
   fwrite(table, 1, sizeof(GPT_PARTITION_TABLE), image);
 
-  // TODO: Write partition contents
+  // Write contents of partitions.
   partContext = partitionContexts;
   while (partContext != NULL) {
+    // Copy partition file to output image file.
     PARTITION_CONTEXT* part = ((PARTITION_CONTEXT *)partContext->Data);
     fseek(image, part->GPTEntry.StartLBA * sectorSize, SEEK_SET);
     uint64_t bytesLeft = part->FileSize;
-    uint8_t *buffer = malloc(1024);
+    const uint64_t copyByAmount = 1024;
+    uint8_t *buffer = malloc(copyByAmount);
     while (bytesLeft) {
-      memset(buffer, 0, 1024);
-      fread(buffer, 1, 1024, part->File);
-      fwrite(buffer, 1, 1024, image);
-      bytesLeft -= 1024;
+      memset(buffer, 0, copyByAmount);
+      fread(buffer, 1, copyByAmount, part->File);
+      size_t written = fwrite(buffer, 1, copyByAmount, image);
+      if (written != copyByAmount) {
+        printf("Error when copying partition to image.\r\n"
+               "\r\n");
+        return 1;
+      }
+      bytesLeft -= copyByAmount;
     }
-
     partContext = partContext->Next;
   }
 
-  // TODO: Write backup partition table
   fseek(image, backupHeader.PartitionsTableLBA * sectorSize, SEEK_SET);
   fwrite(backupTable, 1, sizeof(GPT_PARTITION_TABLE), image);
 
