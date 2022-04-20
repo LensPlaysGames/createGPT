@@ -8,7 +8,7 @@ typedef struct GUID_T {
   uint16_t Data2;
   uint16_t Data3;
   uint8_t  Data4[8];
-} __attribute__((packed)) GUID;
+} GUID;
 
 typedef struct GPT_HEADER_T {
   unsigned char Signature[8];
@@ -25,7 +25,7 @@ typedef struct GPT_HEADER_T {
   uint32_t NumberOfPartitionsTableEntries;
   uint32_t PartitionsTableEntrySize;
   uint32_t PartitionEntryArrayCRC32;
-}  __attribute__((packed)) GPT_HEADER;
+} GPT_HEADER;
 
 typedef struct GPT_PARTITION_ENTRY_T {
   GUID TypeGUID;
@@ -35,10 +35,10 @@ typedef struct GPT_PARTITION_ENTRY_T {
   uint64_t Attributes;
   // FIXME: Should be 36 UTF-16 code points.
   uint8_t Name[72];
-} __attribute__((packed)) GPT_PARTITION_ENTRY;
+} GPT_PARTITION_ENTRY;
 
 typedef struct GPT_PARTITION_TABLE_T {
   GPT_PARTITION_ENTRY PartitionEntries[128];
-} __attribute__((packed)) GPT_PARTITION_TABLE;
+} GPT_PARTITION_TABLE;
 
 #endif /* GPT_IMAGE_GPT_H */
