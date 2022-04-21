@@ -13,6 +13,7 @@ Add a partition using the following flag. Specify it multiple times to add multi
 `<path>` is a filepath to the contents of the partition.
 
 `--type` can be passed either a GUID, or a type preset.
+
 Presets:
 - `null` -- `00000000-0000-0000-0000-000000000000`
 - `system` -- `c12a7328-f81f-11d2-ba4b-00a0c93e3b00`
