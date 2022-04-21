@@ -65,7 +65,7 @@ uint32_t crc32(uint32_t crc, void *buffer, size_t length) {
     have_table = 1;
   }
   crc = ~crc;
-  const uint8_t *q = buffer + length;
+  const uint8_t *q = (uint8_t *)((uintptr_t)buffer + length);
   for (const uint8_t *p = buffer; p < q; ++p) {
     uint8_t octet = *p;
     crc = (crc >> 8) ^ table[(crc ^ octet) & 0xff];

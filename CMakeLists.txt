@@ -23,8 +23,7 @@ add_executable( gpt_image  ${GPT_IMAGE_SOURCES} )
 target_include_directories( gpt_image PUBLIC inc/ )
 target_compile_options(
   gpt_image PRIVATE
-  -O3
   -Wall
-  -Wextra
-  -Werror
+  $<IF:$<C_COMPILER_ID:MSVC>,,-Wextra>
+  $<IF:$<C_COMPILER_ID:MSVC>,,-Werror>
 )
