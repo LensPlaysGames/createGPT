@@ -23,6 +23,12 @@ target_include_directories( createGPT PUBLIC inc/ )
 target_compile_options(
   createGPT PRIVATE
   -Wall
-  $<IF:$<C_COMPILER_ID:MSVC>,,-Wextra>
-  $<IF:$<C_COMPILER_ID:MSVC>,,-Werror>
+  $<IF:$<C_COMPILER_ID:GNU>,-Wextra -Werror,>
 )
+
+if ( BUILD_STATIC )
+  target_link_options(
+    createGPT PRIVATE
+    $<IF:$<C_COMPILER_ID:GNU>,-static -static-libgcc,>
+  )
+endif ()
