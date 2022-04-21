@@ -2,7 +2,6 @@
 #include <mbr.h>
 
 /* TODO:
- * |-- Clean up memory more better.
  * `-- Accept partition name as argument (string conversion nightmare).
  */
 
@@ -382,6 +381,8 @@ int main(int argc, char **argv) {
   fseek(image, header.PartitionsTableLBA * sectorSize, SEEK_SET);
   fwrite(table, 1, sizeof(GPT_PARTITION_TABLE), image);
 
+  free(table);
+
   // Write contents of partitions.
   partContext = partitionContexts;
   while (partContext != NULL) {
@@ -411,13 +412,19 @@ int main(int argc, char **argv) {
     partContext = partContext->Next;
   }
 
+  linked_list_delete_all(partitionContexts, true);
+
   fseek(image, backupHeader.PartitionsTableLBA * sectorSize, SEEK_SET);
   fwrite(backupTable, 1, sizeof(GPT_PARTITION_TABLE), image);
+
+  free(backupTable);
 
   memset(sector, 0, sectorSize);
   memcpy(sector, &backupHeader, sizeof(GPT_HEADER));
   fseek(image, header.BackupLBA * sectorSize, SEEK_SET);
   fwrite(sector, 1, sectorSize, image);
+
+  free(sector);
 
   fclose(image);
   printf("Output image at %s\r\n"
