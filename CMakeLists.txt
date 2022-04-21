@@ -20,6 +20,7 @@ project(
 
 add_executable(
   createGPT
+  src/linked_list.c
   src/main.c
   src/guid.c
 )
