@@ -3,10 +3,11 @@
 
 /* TODO:
  * |-- Clean up memory more better.
- * `-- Accept more partition arguments (name, more lenient GUID, etc).
+ * `-- Accept partition name as argument (string conversion nightmare).
  */
 
 #define _CRT_SECURE_NO_WARNINGS
+#include <assert.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -121,10 +122,31 @@ typedef struct LINKED_LIST_T {
 } LINKED_LIST;
 
 LINKED_LIST* linked_list_add(void* newData, LINKED_LIST *list) {
-  LINKED_LIST *newNode = malloc(sizeof(LINKED_LIST));
-  newNode->Data = newData;
-  newNode->Next = list;
-  return newNode;
+  if (!list) {
+    list = malloc(sizeof(LINKED_LIST));
+    assert(list);
+    list->Data = newData;
+    list->Next = NULL;
+    return list;
+  }
+  else {
+    LINKED_LIST *newNode = malloc(sizeof(LINKED_LIST));
+    assert(newNode);
+    newNode->Data = newData;
+    newNode->Next = list;
+    return newNode; 
+  }
+}
+
+void linked_list_delete_all(LINKED_LIST *list, bool freeData) {
+  while (list) {
+    LINKED_LIST *node = list;
+    list = list->Next;
+    if (freeData)
+      free(node->Data);
+      
+    free(node);
+  }
 }
 
 typedef struct PARTITION_CONTEXT_T {
@@ -160,12 +182,6 @@ int main(int argc, char **argv) {
         if (argc - i <= 0) {
           print_help_with("Expected a filepath following `-p`, `--partition`");
           return 1;
-        }
-        static bool partitionContextsWasNull = false;
-        if (partitionContexts == NULL) {
-          partitionContextsWasNull = true;
-          partitionContexts = malloc(sizeof(LINKED_LIST));
-          partitionContexts->Next = NULL;
         }
         PARTITION_CONTEXT *partitionContext = malloc(sizeof(PARTITION_CONTEXT));
         if (!partitionContext) {
@@ -218,11 +234,7 @@ int main(int argc, char **argv) {
           }
           else i--;
         }
-        if (partitionContextsWasNull) {
-          partitionContexts->Data = partitionContext;
-          partitionContextsWasNull = false;
-        }
-        else partitionContexts = linked_list_add(partitionContext, partitionContexts);
+        partitionContexts = linked_list_add(partitionContext, partitionContexts);
       }
   }
 
