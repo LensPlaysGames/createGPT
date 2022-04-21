@@ -195,21 +195,21 @@ int main(int argc, char **argv) {
           if (!strcmp(argv[i], "--type")) {
             i++;
             if (!strcmp(argv[i], "system")) {
-              partitionContext->GPTEntry.TypeGUID.Data1 = 0xc12a7328;
-              partitionContext->GPTEntry.TypeGUID.Data2 = 0xf81f;
-              partitionContext->GPTEntry.TypeGUID.Data3 = 0x11d2;
-              partitionContext->GPTEntry.TypeGUID.Data4[0] = 0xba;
-              partitionContext->GPTEntry.TypeGUID.Data4[1] = 0x4b;
-              partitionContext->GPTEntry.TypeGUID.Data4[2] = 0x00;
-              partitionContext->GPTEntry.TypeGUID.Data4[3] = 0xa0;
-              partitionContext->GPTEntry.TypeGUID.Data4[4] = 0xc9;
-              partitionContext->GPTEntry.TypeGUID.Data4[5] = 0x3e;
-              partitionContext->GPTEntry.TypeGUID.Data4[6] = 0xc9;
-              partitionContext->GPTEntry.TypeGUID.Data4[6] = 0x3b;
+              string_to_guid("c12a7328-f81f-11d2-0xba4b-00a0c93ec93b"
+                             , &partitionContext->GPTEntry.TypeGUID);
             }
             else if (!strcmp(argv[i], "null")) {
               memset(&partitionContext->GPTEntry.TypeGUID, 0, sizeof(GUID));
             }
+            // TODO: More exhaustive GUID verification (check for hex digits only).
+            else if (strlen(argv[i]) == 36
+                     && (argv[i][8] == '-'
+                         && argv[i][13] == '-'
+                         && argv[i][18] == '-'
+                         && argv[i][23] == '-'))
+              {
+                string_to_guid(argv[i], &partitionContext->GPTEntry.TypeGUID);
+              }
             else {
               i -= 2;
               print_help_with("Did not recognize partition type");
