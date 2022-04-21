@@ -12,17 +12,16 @@ endif ()
 # Export compilation database in JSON format.
 set( CMAKE_EXPORT_COMPILE_COMMANDS on )
 
-project( GPT_IMAGE_PROJ VERSION 0.0.1 LANGUAGES C )
-
-set(
-  GPT_IMAGE_SOURCES
-  src/main.c
+project(
+  createGPT_PROJ
+  VERSION 0.0.1
+  LANGUAGES C
 )
 
-add_executable( gpt_image  ${GPT_IMAGE_SOURCES} )
-target_include_directories( gpt_image PUBLIC inc/ )
+add_executable( createGPT src/main.c )
+target_include_directories( createGPT PUBLIC inc/ )
 target_compile_options(
-  gpt_image PRIVATE
+  createGPT PRIVATE
   -Wall
   $<IF:$<C_COMPILER_ID:MSVC>,,-Wextra>
   $<IF:$<C_COMPILER_ID:MSVC>,,-Werror>
