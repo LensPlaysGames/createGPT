@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wchar.h>
 
 #define GPT_IMAGE_VERSION_MAJOR 0
 #define GPT_IMAGE_VERSION_MINOR 0
@@ -21,9 +20,11 @@ void print_help() {
   printf("gpt-image V%u.%u.%u.%u Copyright (C) 2022 Rylan Lens Kellogg\r\n"
          "  Create disk image files with valid GUID Partition Tables.\r\n"
          "\r\n"
-         "USAGE: %s -o <path> [-p <path>]\r\n"
+         "USAGE: %s -o <path> [-p <path> [--type <guid|preset>]]\r\n"
          "  -o, --output: Write the output disk image file to this filepath\r\n"
          "  -p, --part:   Create a partition from the image at path\r\n"
+         "                Type presets:\r\n"
+         "                  system  -- EFI System partition\r\n"
          "\r\n"
          , GPT_IMAGE_VERSION_MAJOR
          , GPT_IMAGE_VERSION_MINOR
@@ -125,7 +126,7 @@ int main(int argc, char **argv) {
 
   size_t dataSectorsOffset = 34;
   LINKED_LIST *partitionContexts = NULL;
-  for (int i = 0; i < argc; ++i) {
+  for (int i = 1; i < argc; ++i) {
     const char *arg = argv[i];
     if (!strcmp(arg, "-o") || !strcmp(arg, "--output")) {
       i++;
@@ -177,6 +178,37 @@ int main(int argc, char **argv) {
         partitionContext->GPTEntry.EndLBA = dataSectorsOffset + partitionSectorCount - 1;
         dataSectorsOffset += partitionSectorCount;
         partitionContext->File = image;
+        if (argc - i >= 2) {
+          i++;
+          if (!strcmp(argv[i], "--type")) {
+            i++;
+            if (!strcmp(argv[i], "system")) {
+              partitionContext->GPTEntry.TypeGUID.Data1 = 0xc12a7328;
+              partitionContext->GPTEntry.TypeGUID.Data2 = 0xf81f;
+              partitionContext->GPTEntry.TypeGUID.Data3 = 0x11d2;
+              partitionContext->GPTEntry.TypeGUID.Data4[0] = 0xba;
+              partitionContext->GPTEntry.TypeGUID.Data4[1] = 0x4b;
+              partitionContext->GPTEntry.TypeGUID.Data4[2] = 0x00;
+              partitionContext->GPTEntry.TypeGUID.Data4[3] = 0xa0;
+              partitionContext->GPTEntry.TypeGUID.Data4[4] = 0xc9;
+              partitionContext->GPTEntry.TypeGUID.Data4[5] = 0x3e;
+              partitionContext->GPTEntry.TypeGUID.Data4[6] = 0xc9;
+              partitionContext->GPTEntry.TypeGUID.Data4[6] = 0x3b;
+            }
+            else {
+              i -= 2;
+              printf("Did not recognize type\r\n"
+                     "\r\n");
+            }
+          }
+          else i--;
+        }
+
+        if (argc - i <= 1)
+            i--;
+        else {
+
+        }
         if (partitionContextsWasNull) {
           partitionContexts->Data = partitionContext;
           partitionContextsWasNull = false;
@@ -214,13 +246,20 @@ int main(int argc, char **argv) {
   GPT_PARTITION_ENTRY *tableIterator = (GPT_PARTITION_ENTRY *)table;
   while (partContext != NULL) {
     PARTITION_CONTEXT *part = ((PARTITION_CONTEXT *)partContext->Data);
-    swprintf((wchar_t *)part->GPTEntry.Name, 72, L"I am a partition");
+    memset(part->GPTEntry.Name, 0, 72);
+    memcpy(part->GPTEntry.Name, u"I am a partition                   ", 36);
     printf("Partition Context:\r\n");
-    wprintf(L"  Name:     \"%ls\"\r\n", part->GPTEntry.Name);
+    // FIXME: Rudimentary printing of UCS-2 characters
+    printf("  Name:     \"");
+    char *name = (char*)&part->GPTEntry.Name[0];
+    for (unsigned i = 0; i < 72; i += 2) {
+      printf("%c", name[i]);
+    }
+    printf("\"\r\n");
     printf("  Path:     \"%s\"\r\n"
            "  Size:     %zu\r\n"
-           "  StartLBA: %llu\r\n"
-           "  EndLBA:   %llu\r\n"
+           "  StartLBA: %"SCNd64"\r\n"
+           "  EndLBA:   %"SCNd64"\r\n"
            , part->ImagePath
            , part->FileSize
            , part->GPTEntry.StartLBA
@@ -335,7 +374,8 @@ int main(int argc, char **argv) {
     uint8_t *buffer = malloc(copyByAmount);
     while (bytesLeft) {
       memset(buffer, 0, copyByAmount);
-      fread(buffer, 1, copyByAmount, part->File);
+      size_t read = fread(buffer, 1, copyByAmount, part->File);
+      (void)read;
       size_t written = fwrite(buffer, 1, copyByAmount, image);
       if (written != copyByAmount) {
         printf("Error when copying partition to image.\r\n"
@@ -344,6 +384,7 @@ int main(int argc, char **argv) {
       }
       bytesLeft -= copyByAmount;
     }
+    free(buffer);
     partContext = partContext->Next;
   }
 
