@@ -22,14 +22,17 @@
 char *GPT_IMAGE_ARGV_0 = NULL;
 
 void print_help() {
-  printf("gpt-image V%u.%u.%u.%u Copyright (C) 2022 Rylan Lens Kellogg\r\n"
+  printf("createGPT V%u.%u.%u.%u Copyright (C) 2022 Rylan Lens Kellogg\r\n"
          "  Create disk image files with valid GUID Partition Tables.\r\n"
          "\r\n"
          "USAGE: %s -o <path> [-p <path> [--type <guid|preset>]]\r\n"
          "  -o, --output: Write the output disk image file to this filepath\r\n"
          "  -p, --part:   Create a partition from the image at path\r\n"
-         "                Type presets:\r\n"
-         "                  system  -- EFI System partition\r\n"
+         "    --type:       Specify a type GUID, or a type preset.\r\n"
+         "                  GUID format: 00000000-0000-0000-0000-000000000000\r\n"
+         "                  Type presets:\r\n"
+         "                    null    -- Zero\r\n"
+         "                    system  -- EFI System partition\r\n"
          "\r\n"
          , GPT_IMAGE_VERSION_MAJOR
          , GPT_IMAGE_VERSION_MINOR
@@ -204,19 +207,16 @@ int main(int argc, char **argv) {
               partitionContext->GPTEntry.TypeGUID.Data4[6] = 0xc9;
               partitionContext->GPTEntry.TypeGUID.Data4[6] = 0x3b;
             }
+            else if (!strcmp(argv[i], "null")) {
+              memset(&partitionContext->GPTEntry.TypeGUID, 0, sizeof(GUID));
+            }
             else {
               i -= 2;
-              print_help_with("Did not recognize type");
+              print_help_with("Did not recognize partition type");
               return 1;
             }
           }
           else i--;
-        }
-
-        if (argc - i <= 1)
-            i--;
-        else {
-
         }
         if (partitionContextsWasNull) {
           partitionContexts->Data = partitionContext;
