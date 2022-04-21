@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
           if (!strcmp(argv[i], "--type")) {
             i++;
             if (!strcmp(argv[i], "system")) {
-              string_to_guid("c12a7328-f81f-11d2-0xba4b-00a0c93ec93b"
+              string_to_guid("c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
                              , &partitionContext->GPTEntry.TypeGUID);
             }
             else if (!strcmp(argv[i], "null")) {
