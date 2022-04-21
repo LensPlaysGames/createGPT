@@ -1,14 +1,9 @@
 #ifndef GPT_IMAGE_GPT_H
 #define GPT_IMAGE_GPT_H
 
-#include <stdint.h>
+#include <guid.h>
 
-typedef struct GUID_T {
-  uint32_t Data1;
-  uint16_t Data2;
-  uint16_t Data3;
-  uint8_t  Data4[8];
-} GUID;
+#include <stdint.h>
 
 typedef struct GPT_HEADER_T {
   unsigned char Signature[8];

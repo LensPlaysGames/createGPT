@@ -18,7 +18,11 @@ project(
   LANGUAGES C
 )
 
-add_executable( createGPT src/main.c )
+add_executable(
+  createGPT
+  src/main.c
+  src/guid.c
+)
 target_include_directories( createGPT PUBLIC inc/ )
 target_compile_options(
   createGPT PRIVATE
