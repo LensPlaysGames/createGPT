@@ -44,10 +44,12 @@ void print_help() {
 
 void print_help_with(const char* msg) {
   print_help();
-  printf("%s\r\n"
-         "\r\n"
-         , msg
-         );
+  if (msg != NULL) {
+    printf("%s\r\n"
+           "\r\n"
+           , msg
+           );
+  }
 }
 
 uint32_t crc32(uint32_t crc, void *buffer, size_t length) {
@@ -80,9 +82,29 @@ uint32_t crc32(uint32_t crc, void *buffer, size_t length) {
 #define G16 "%04" SCNx16
 #define G8  "%02" SCNx8
 
+#define GUID_STRING_LENGTH 36
+
 bool string_to_guid(const char *str, GUID *guid) {
-  if (!guid)
+  if (str == NULL || guid == NULL) {
+    printf("Null arguments\r\n");
     return false;
+  }
+  
+  if (strlen(str) != GUID_STRING_LENGTH) {
+    printf("GUID string is of incorrect length\r\n"
+           "\r\n");
+    return false;
+  }
+  
+  if (str[8] != '-'
+      || str[13] != '-'
+      || str[18] != '-'
+      || str[23] != '-')
+    {
+      printf("Didn't find dashes in GUID string\r\n"
+             "\r\n");
+      return false;
+    }
 
   int nchars = -1;
   int nfields =
@@ -95,7 +117,22 @@ bool string_to_guid(const char *str, GUID *guid) {
            , &guid->Data4[6], &guid->Data4[7]
            , &nchars
            );
-  return nfields == 11 && nchars == 38;
+  if (nfields != 11) {
+    printf("nfields is not correct (expecting 11): %i\r\n"
+           "\r\n"
+           , nfields
+           );
+    return false;
+  }
+  if (nchars != GUID_STRING_LENGTH) {
+    printf("nchars is not correct (expecting %i): %i\r\n"
+           "\r\n"
+           , (int)GUID_STRING_LENGTH
+           , nchars
+           );
+    return false;
+  }
+  return true;
 }
 
 void print_guid(GUID *guid) {
@@ -216,19 +253,15 @@ int main(int argc, char **argv) {
             else if (!strcmp(argv[i], "null")) {
               memset(&partitionContext->GPTEntry.TypeGUID, 0, sizeof(GUID));
             }
-            // TODO: More exhaustive GUID verification (check for hex digits only).
-            else if (strlen(argv[i]) == 36
-                     && (argv[i][8] == '-'
-                         && argv[i][13] == '-'
-                         && argv[i][18] == '-'
-                         && argv[i][23] == '-'))
-              {
-                string_to_guid(argv[i], &partitionContext->GPTEntry.TypeGUID);
-              }
             else {
-              i -= 2;
-              print_help_with("Did not recognize partition type");
-              return 1;
+              GUID temp;
+              if (string_to_guid(argv[i], &temp)) {
+                partitionContext->GPTEntry.TypeGUID = temp;
+              }
+              else {
+                print_help_with("Did not recognize partition type");
+                return 1;
+              }
             }
           }
           else i--;
@@ -314,17 +347,7 @@ int main(int argc, char **argv) {
   header.BackupLBA = header.LastUsableLBA + 33;
   // GUID
   // FIXME: Actually generate a random GUID.
-  header.DiskGUID.Data1 = 8907;
-  header.DiskGUID.Data2 = 897;
-  header.DiskGUID.Data3 = 981;
-  header.DiskGUID.Data4[0] = 128;
-  header.DiskGUID.Data4[1] = 238;
-  header.DiskGUID.Data4[2] = 231;
-  header.DiskGUID.Data4[3] = 85;
-  header.DiskGUID.Data4[4] = 10;
-  header.DiskGUID.Data4[5] = 93;
-  header.DiskGUID.Data4[6] = 152;
-  header.DiskGUID.Data4[7] = 255;
+  string_to_guid("12345678-6969-0420-b00b-deadbeefcafe", &header.DiskGUID);
   // Partitions
   header.PartitionsTableLBA = 2;
   header.NumberOfPartitionsTableEntries = 128;
