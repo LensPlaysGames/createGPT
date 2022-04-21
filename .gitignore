@@ -1,6 +1,11 @@
 # Prerequisites
 *.d
 
+# Image files
+*.bin
+*.img
+*.iso
+
 # Compiled Object files
 *.slo
 *.lo
@@ -31,17 +36,21 @@
 *.out
 *.app
 
-# Builds
+# CMake Build System
 **/bin/
 **/bld/
 **/build/
 **/builds/
 **/win/
+**/winstatic/
 **/winja/
 **/windows/
 **/lnx/
+**/lnxstatic/
 **/linux/
+**/linuxstatic/
 **/make/
+**/mk/
 **/ninja/
 **/debug/
 **/dbg/
@@ -62,7 +71,7 @@
 
 # clangd
 **/compile_commands.json
-.cache/
+**/.cache/
 
 # cinclude2dot
 **/include_visualization/
