@@ -1,6 +1,11 @@
 #include <gpt.h>
 #include <mbr.h>
 
+/* TODO:
+ * |-- Clean up memory more better.
+ * `-- Accept more partition arguments (name, more lenient GUID, etc).
+ */
+
 #define _CRT_SECURE_NO_WARNINGS
 #include <inttypes.h>
 #include <stdbool.h>
@@ -31,6 +36,14 @@ void print_help() {
          , GPT_IMAGE_VERSION_PATCH
          , GPT_IMAGE_VERSION_TWEAK
          , GPT_IMAGE_ARGV_0
+         );
+}
+
+void print_help_with(const char* msg) {
+  print_help();
+  printf("%s\r\n"
+         "\r\n"
+         , msg
          );
 }
 
@@ -131,9 +144,7 @@ int main(int argc, char **argv) {
     if (!strcmp(arg, "-o") || !strcmp(arg, "--output")) {
       i++;
       if (argc - i <= 0){
-        print_help();
-        printf("Expected a filepath following `-o`, `--output`\r\n"
-               "\r\n");
+        print_help_with("Expected a filepath following `-o`, `--output`");
         return 1;
       }
       path = argv[i];
@@ -144,9 +155,7 @@ int main(int argc, char **argv) {
       {
         i++;
         if (argc - i <= 0) {
-          print_help();
-          printf("Expected a filepath following `-p`, `--partition`\r\n"
-                 "\r\n");
+          print_help_with("Expected a filepath following `-p`, `--partition`");
           return 1;
         }
         static bool partitionContextsWasNull = false;
@@ -162,7 +171,7 @@ int main(int argc, char **argv) {
         }
         memset(partitionContext, 0, sizeof(PARTITION_CONTEXT));
         partitionContext->ImagePath = argv[i];
-        FILE *image = fopen(partitionContext->ImagePath, "r");
+        FILE *image = fopen(partitionContext->ImagePath, "rb");
         if (!image) {
           printf("Could not open partition image at %s"
                  , partitionContext->ImagePath);
@@ -197,8 +206,8 @@ int main(int argc, char **argv) {
             }
             else {
               i -= 2;
-              printf("Did not recognize type\r\n"
-                     "\r\n");
+              print_help_with("Did not recognize type");
+              return 1;
             }
           }
           else i--;
@@ -218,9 +227,7 @@ int main(int argc, char **argv) {
   }
 
   if (!path) {
-    print_help();
-    printf("Output filepath is null!\r\n"
-           "\r\n");
+    print_help_with("Output filepath is null!");
     return 1;
   }
 
@@ -246,10 +253,10 @@ int main(int argc, char **argv) {
   GPT_PARTITION_ENTRY *tableIterator = (GPT_PARTITION_ENTRY *)table;
   while (partContext != NULL) {
     PARTITION_CONTEXT *part = ((PARTITION_CONTEXT *)partContext->Data);
+    // FIXME: Rudimentary handling of UCS-2 characters
     memset(part->GPTEntry.Name, 0, 72);
-    memcpy(part->GPTEntry.Name, u"I am a partition                   ", 36);
+    memcpy(part->GPTEntry.Name, u"EFI System                         ", 36);
     printf("Partition Context:\r\n");
-    // FIXME: Rudimentary printing of UCS-2 characters
     printf("  Name:     \"");
     char *name = (char*)&part->GPTEntry.Name[0];
     for (unsigned i = 0; i < 72; i += 2) {
@@ -270,7 +277,7 @@ int main(int argc, char **argv) {
     printf("\r\n"
            "  Unique:   ");
     print_guid(&part->GPTEntry.UniqueGUID);
-    printf("\r\n");
+    printf("\r\n\r\n");
     
     uint64_t endLBA = part->GPTEntry.EndLBA;
     partitionsLastLBA = endLBA > partitionsLastLBA ? endLBA : partitionsLastLBA;
@@ -370,15 +377,19 @@ int main(int argc, char **argv) {
     PARTITION_CONTEXT* part = ((PARTITION_CONTEXT *)partContext->Data);
     fseek(image, part->GPTEntry.StartLBA * sectorSize, SEEK_SET);
     uint64_t bytesLeft = part->FileSize;
-    const uint64_t copyByAmount = 1024;
+    const uint64_t copyByAmount = 512;
     uint8_t *buffer = malloc(copyByAmount);
     while (bytesLeft) {
       memset(buffer, 0, copyByAmount);
       size_t read = fread(buffer, 1, copyByAmount, part->File);
-      (void)read;
+      if (bytesLeft > copyByAmount && read < copyByAmount) {
+        printf("Error when reading partition image during copying.\r\n"
+               "\r\n");
+        return 1;
+      }
       size_t written = fwrite(buffer, 1, copyByAmount, image);
       if (written != copyByAmount) {
-        printf("Error when copying partition to image.\r\n"
+        printf("Error when writing partition to image during copying.\r\n"
                "\r\n");
         return 1;
       }
@@ -397,6 +408,10 @@ int main(int argc, char **argv) {
   fwrite(sector, 1, sectorSize, image);
 
   fclose(image);
+  printf("Output image at %s\r\n"
+         "\r\n"
+         , path
+         );
 
   return 0;
 }
