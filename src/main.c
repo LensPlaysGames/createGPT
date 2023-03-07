@@ -19,8 +19,8 @@
 
 #define GPT_IMAGE_VERSION_MAJOR 0
 #define GPT_IMAGE_VERSION_MINOR 0
-#define GPT_IMAGE_VERSION_PATCH 1
-#define GPT_IMAGE_VERSION_TWEAK 1
+#define GPT_IMAGE_VERSION_PATCH 2
+#define GPT_IMAGE_VERSION_TWEAK 0
 
 char *GPT_IMAGE_ARGV_0 = NULL;
 
@@ -28,7 +28,7 @@ void print_help() {
   printf("createGPT V%u.%u.%u.%u Copyright (C) 2022 Rylan Lens Kellogg\r\n"
          "  Create disk image files with valid GUID Partition Tables.\r\n"
          "\r\n"
-         "USAGE: %s -o <path> [-p <path> [--type <guid|preset>]]\r\n"
+         "USAGE: %s -o <path> [-p <path> [--type <guid|preset> | --name <name>]]\r\n"
          "  -o, --output: Write the output disk image file to this filepath\r\n"
          "  -p, --part:   Create a partition from the image at path\r\n"
          "    --type:       Specify a type GUID, or a type preset.\r\n"
@@ -36,6 +36,7 @@ void print_help() {
          "                  Type presets:\r\n"
          "                    null    -- Zero\r\n"
          "                    system  -- EFI System partition\r\n"
+         "    --name:       Specify a name for the partition.\r\n"
          "\r\n"
          , GPT_IMAGE_VERSION_MAJOR
          , GPT_IMAGE_VERSION_MINOR
@@ -67,6 +68,8 @@ int main(int argc, char **argv) {
 
   const unsigned sectorSize = 512;
   const char* path = NULL;
+
+  const size_t name_length = sizeof(GPT_PARTITION_ENTRY) - 0x38;
 
   size_t dataSectorsOffset = 34;
   LINKED_LIST *partitionContexts = NULL;
@@ -105,20 +108,24 @@ int main(int argc, char **argv) {
         fseek(image, 0, SEEK_END);
         partitionContext->FileSize = ftell(image);
         fseek(image, 0, SEEK_SET);
-        memset(&partitionContext->GPTEntry.Name[0], '\0', 72);
+        memset(&partitionContext->GPTEntry.Name[0], ' ', name_length);
         partitionContext->GPTEntry.Attributes = 0;
         partitionContext->GPTEntry.StartLBA = (uint64_t)dataSectorsOffset;
         size_t partitionSectorCount = (partitionContext->FileSize / sectorSize) + 1;
         partitionContext->GPTEntry.EndLBA = dataSectorsOffset + partitionSectorCount - 1;
         dataSectorsOffset += partitionSectorCount;
         partitionContext->File = image;
-        if (argc - i >= 2) {
+        while (argc - i >= 2) {
           i++;
           if (!strcmp(argv[i], "--type")) {
             i++;
             if (!strcmp(argv[i], "system")) {
               string_to_guid("c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
                              , &partitionContext->GPTEntry.TypeGUID);
+              const char efi_system_partition_name[] = "E\0F\0I\0 \0S\0y\0s\0t\0e\0m\0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0";
+              size_t j = 0;
+              for (const char *c = efi_system_partition_name; j < sizeof(efi_system_partition_name)-1; ++c, ++j)
+                partitionContext->GPTEntry.Name[j] = *c;
             }
             else if (!strcmp(argv[i], "null")) {
               memset(&partitionContext->GPTEntry.TypeGUID, 0, sizeof(GUID));
@@ -133,8 +140,27 @@ int main(int argc, char **argv) {
                 return 1;
               }
             }
+            continue;
           }
-          else i--;
+          else if (!strcmp(argv[i], "--name")) {
+            i++;
+            size_t arg_length = strlen(argv[i]);
+            size_t j = 0;
+            for (const char *c = argv[i]; j < arg_length * 2 && j < name_length && *c; ++c, j += 2) {
+              partitionContext->GPTEntry.Name[j] = *c;
+              partitionContext->GPTEntry.Name[j+1] = 0;
+            }
+            // Fill trailing space with spaces
+            for (; j < name_length; j += 2) {
+              partitionContext->GPTEntry.Name[j] = ' ';
+              partitionContext->GPTEntry.Name[j+1] = 0;
+            }
+            continue;
+          }
+          else {
+            i--;
+            break;
+          }
         }
         partitionContexts = linked_list_add(partitionContext, partitionContexts);
       }
@@ -167,20 +193,17 @@ int main(int argc, char **argv) {
   GPT_PARTITION_ENTRY *tableIterator = (GPT_PARTITION_ENTRY *)table;
   while (partContext != NULL) {
     PARTITION_CONTEXT *part = ((PARTITION_CONTEXT *)partContext->Data);
-    // FIXME: Rudimentary handling of UCS-2 characters
-    memset(part->GPTEntry.Name, 0, 72);
-    memcpy(part->GPTEntry.Name, u"EFI System                         ", 36);
     printf("Partition Context:\r\n");
     printf("  Name:     \"");
+    // An ugly way to handle utf-16...
     char *name = (char*)&part->GPTEntry.Name[0];
-    for (unsigned i = 0; i < 72; i += 2) {
+    for (unsigned i = 0; i < 72; i += 2)
       printf("%c", name[i]);
-    }
     printf("\"\r\n");
     printf("  Path:     \"%s\"\r\n"
            "  Size:     %zu\r\n"
-           "  StartLBA: %"SCNd64"\r\n"
-           "  EndLBA:   %"SCNd64"\r\n"
+           "  StartLBA: %"PRId64"\r\n"
+           "  EndLBA:   %"PRId64"\r\n"
            , part->ImagePath
            , part->FileSize
            , part->GPTEntry.StartLBA
@@ -192,7 +215,6 @@ int main(int argc, char **argv) {
            "  Unique:   ");
     print_guid(&part->GPTEntry.UniqueGUID);
     printf("\r\n\r\n");
-    
     uint64_t endLBA = part->GPTEntry.EndLBA;
     partitionsLastLBA = endLBA > partitionsLastLBA ? endLBA : partitionsLastLBA;
 
@@ -206,7 +228,6 @@ int main(int argc, char **argv) {
   GPT_HEADER header;
   memset(&header, 0, sizeof(GPT_HEADER));
   // Header information
-  // FIXME: Signature passed on cmd line!
   memcpy(&header.Signature[0], "EFI PART", 8);
   header.Revision = 1 << 16;
   header.Size = sizeof(GPT_HEADER);
