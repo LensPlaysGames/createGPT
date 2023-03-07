@@ -122,6 +122,7 @@ int main(int argc, char **argv) {
             if (!strcmp(argv[i], "system")) {
               string_to_guid("c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
                              , &partitionContext->GPTEntry.TypeGUID);
+              // UNICODE16-LE "EFI System" padded with spaces
               const char efi_system_partition_name[] = "E\0F\0I\0 \0S\0y\0s\0t\0e\0m\0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0 \0";
               size_t j = 0;
               for (const char *c = efi_system_partition_name; j < sizeof(efi_system_partition_name)-1; ++c, ++j)
@@ -144,9 +145,8 @@ int main(int argc, char **argv) {
           }
           else if (!strcmp(argv[i], "--name")) {
             i++;
-            size_t arg_length = strlen(argv[i]);
             size_t j = 0;
-            for (const char *c = argv[i]; j < arg_length * 2 && j < name_length && *c; ++c, j += 2) {
+            for (const char *c = argv[i]; j < name_length && *c; ++c, j += 2) {
               partitionContext->GPTEntry.Name[j] = *c;
               partitionContext->GPTEntry.Name[j+1] = 0;
             }
